@@ -1,0 +1,25 @@
+<!-- templates/aqi/homepage.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AirWatch – Welcome</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  </head>
+  <body class="container">
+    <main style="max-width: 800px; margin: 4rem auto;">
+      <h1>AirWatch – Air Quality Monitor</h1>
+      <p>Sign in to check air quality, trends, and 7-day insights for your city.</p>
+
+      <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+        <a href="{% url 'login' %}" role="button">Login</a>
+        <a href="{% url 'signup' %}" role="button" class="secondary">Create account</a>
+        <a href="/admin/" role="button" class="contrast">Admin</a>
+      </div>
+
+      <hr>
+      <p>Don’t have an account? Use <strong>Create account</strong> above.</p>
+    </main>
+  </body>
+</html>

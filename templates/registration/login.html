@@ -1,0 +1,41 @@
+<!-- templates/registration/login.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login – AirWatch</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  </head>
+  <body class="container">
+    <main style="max-width: 480px; margin: 4rem auto;">
+      <h1>Login</h1>
+
+      {% if form.errors %}
+        <article class="contrast">
+          <p>Invalid username or password. Please try again.</p>
+        </article>
+      {% endif %}
+
+      <form method="post">
+        {% csrf_token %}
+        <label>Username
+          {{ form.username }}
+        </label>
+        <label>Password
+          {{ form.password }}
+        </label>
+
+        <button type="submit">Sign in</button>
+      </form>
+
+      <p style="margin-top:1rem;">
+        <a href="{% url 'password_reset' %}">Forgot password?</a>
+      </p>
+
+      <p style="margin-top:1rem;">
+        <a href="{% url 'landing' %}">← Back to Home</a>
+      </p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AirWatch – Air Quality Monitor</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net"/>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    :root { --bg:#0f172a; --card:#111827; --fg:#e5e7eb; --muted:#9ca3af; }
+    body { margin:0; font-family: ui-sans-serif,system-ui,Segoe UI,Roboto,Arial; background:linear-gradient(180deg,#0b1220,#0f172a);}
+    .wrap { max-width:1000px; margin:40px auto; padding:0 16px; }
+    .card { background:var(--card); color:var(--fg); border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,.35); padding:20px; }
+    .title { font-size:28px; margin:0 0 8px; }
+    form { display:flex; gap:10px; margin: 12px 0 24px; }
+    input[type="text"]{ flex:1; padding:12px 14px; border-radius:12px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
+    button{ padding:12px 18px; border-radius:12px; border:0; background:#2563eb; color:white; font-weight:600; cursor:pointer; }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width:900px){ .grid{ grid-template-columns: 1.1fr .9fr; } }
+    .pill{ display:inline-block; padding:6px 10px; border-radius:999px; font-weight:600; }
+    .metrics{ display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:12px; }
+    .metric{ background:#0b1220; border:1px solid #334155; padding:12px; border-radius:12px; text-align:center; }
+    .muted{ color:var(--muted); font-size:12px; }
+    footer { color:#94a3b8; text-align:center; margin:24px 0 40px; font-size:12px; }
+  </style>
+</head>
+<body>
+<header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+  <strong>AirWatch – Dashboard</strong>
+  <nav>
+    <span style="margin-right:1rem;">Hello, {{ request.user.username }}</span>
+    <a href="{% url 'logout' %}?next=/" role="button" class="secondary">Logout</a>
+  </nav>
+</header>
+<div class="wrap">
+  <div class="card">
+    <h1 class="title">AirWatch – Air Quality Monitor</h1>
+    <p class="muted">Enter a city name (e.g., “Chicago”) or a ZIP code (e.g., “60601”).</p>
+    <form method="get">
+      <input type="text" name="q" placeholder="City or ZIP…" value="{{ request.GET.q|default:'' }}" required>
+      <button type="submit">Check AQI</button>
+    </form>
+
+    {% if error %}
+      <p style="color:#fca5a5;">{{ error }}</p>
+    {% endif %}
+
+    {% if result %}
+      <div class="grid">
+        <div>
+          <h2 style="margin:6px 0 4px;">{{ result.place }}</h2>
+          <div class="pill" style="background: {{ result.color }};">AQI: {{ result.aqi }} — {{ result.category }}</div>
+
+          <div class="metrics">
+            <div class="metric"><div class="muted">PM2.5 (µg/m³)</div><div style="font-size:20px;">{{ result.current.pm2_5|default:"–" }}</div></div>
+            <div class="metric"><div class="muted">PM10 (µg/m³)</div><div style="font-size:20px;">{{ result.current.pm10|default:"–" }}</div></div>
+            <div class="metric"><div class="muted">O₃ (µg/m³)</div><div style="font-size:20px;">{{ result.current.o3|default:"–" }}</div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="metric">
+            <div class="muted">CO (µg/m³)</div><div style="font-size:20px;">{{ result.current.co|default:"–" }}</div>
+          </div>
+          <div class="metric" style="margin-top:12px;">
+            <div class="muted">NO₂ (µg/m³)</div><div style="font-size:20px;">{{ result.current.no2|default:"–" }}</div>
+          </div>
+          <div class="metric" style="margin-top:12px;">
+            <div class="muted">SO₂ (µg/m³)</div><div style="font-size:20px;">{{ result.current.so2|default:"–" }}</div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if result %}
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin:0 0 8px;">7-Day Overview (D3)</h3>
+
+    <div style="margin-top:8px;">
+      <h4 style="margin:0 0 10px;">PM2.5 — Hourly Area</h4>
+      <div id="pm25-area"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <h4 style="margin:0 0 10px;">PM10 — Daily Columns</h4>
+      <div id="pm10-bars"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <h4 style="margin:0 0 10px;">O₃ — Daily Lollipop</h4>
+      <div id="o3-lollipop"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <h4 style="margin:0 0 10px;">AQI — Heatmap (Hour × Day)</h4>
+      <div id="d3-heatmap"></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <footer>Data courtesy of Open-Meteo. AQI computed using EPA breakpoints (approx.).</footer>
+</div>
+
+{% if result %}
+<script>
+  // Data prepared by the view (requires the updated views.py with result.hourly & result.daily)
+  const hourly = {{ result.hourly|safe }};   // [{time, pm2_5, pm10, o3, aqi}]
+  const daily  = {{ result.daily|safe }};    // [{day, pm2_5, pm10, o3, aqi}]
+
+  // --- parsing helpers
+  const parseISO = d3.utcParse("%Y-%m-%dT%H:%M");
+  hourly.forEach(d => d.date = parseISO(d.time));
+  const parseDay = d3.utcParse("%Y-%m-%d");
+  daily.forEach(d => d.date = parseDay(d.day));
+
+  const makeSvg = (sel, width=Math.min(980, document.body.clientWidth - 40), height=280, m={top:20,right:22,bottom:32,left:48}) => {
+    const svg = d3.select(sel).append("svg").attr("width", width).attr("height", height);
+    const g = svg.append("g").attr("transform", `translate(${m.left},${m.top})`);
+    return {svg, g, width, height, m, w: width - m.left - m.right, h: height - m.top - m.bottom};
+  };
+
+  // --- 1) PM2.5 – Hourly Area
+  (function pm25Area(){
+    const rows = hourly.filter(d => d.pm2_5 != null);
+    if (!rows.length) return;
+    const {g, w, h} = makeSvg("#pm25-area");
+    const x = d3.scaleUtc().domain(d3.extent(rows, d => d.date)).range([0, w]);
+    const y = d3.scaleLinear().domain([0, d3.max(rows, d => d.pm2_5) || 1]).nice().range([h, 0]);
+    g.append("g").attr("transform", `translate(0,${h})`).call(d3.axisBottom(x).ticks(7).tickFormat(d3.utcFormat("%m-%d %Hh")));
+    g.append("g").call(d3.axisLeft(y));
+    const area = d3.area().defined(d=>d.pm2_5!=null).x(d=>x(d.date)).y0(h).y1(d=>y(d.pm2_5)).curve(d3.curveMonotoneX);
+    const line = d3.line().defined(d=>d.pm2_5!=null).x(d=>x(d.date)).y(d=>y(d.pm2_5)).curve(d3.curveMonotoneX);
+    g.append("path").datum(rows).attr("fill","#60a5fa").attr("opacity",0.4).attr("d",area);
+    g.append("path").datum(rows).attr("fill","none").attr("stroke","#60a5fa").attr("stroke-width",2).attr("d",line);
+  })();
+
+  // --- 2) PM10 – Daily Columns
+  (function pm10Bars(){
+    const rows = daily.filter(d => d.pm10 != null);
+    if (!rows.length) return;
+    const {g, w, h} = makeSvg("#pm10-bars", undefined, 260);
+    const x = d3.scaleBand().domain(rows.map(d=>d.day)).range([0,w]).padding(0.2);
+    const y = d3.scaleLinear().domain([0, d3.max(rows, d=>d.pm10) || 1]).nice().range([h,0]);
+    g.append("g").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d=>d.slice(5)));
+    g.append("g").call(d3.axisLeft(y));
+    g.selectAll("rect.bar").data(rows).enter().append("rect")
+      .attr("class","bar").attr("x",d=>x(d.day)).attr("y",d=>y(d.pm10))
+      .attr("width",x.bandwidth()).attr("height",d=>h - y(d.pm10)).attr("fill","#34d399");
+    g.selectAll("text.val").data(rows).enter().append("text")
+      .attr("x",d=>x(d.day)+x.bandwidth()/2).attr("y",d=>y(d.pm10)-6)
+      .attr("text-anchor","middle").attr("fill","#cbd5e1").attr("font-size",11).text(d=>d.pm10);
+  })();
+
+  // --- 3) O₃ – Daily Lollipop
+  (function o3Lollipop(){
+    const rows = daily.filter(d => d.o3 != null);
+    if (!rows.length) return;
+    const {g, w, h} = makeSvg("#o3-lollipop", undefined, 260);
+    const x = d3.scaleBand().domain(rows.map(d=>d.day)).range([0,w]).padding(0.25);
+    const y = d3.scaleLinear().domain([0, d3.max(rows, d=>d.o3) || 1]).nice().range([h,0]);
+    g.append("g").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d=>d.slice(5)));
+    g.append("g").call(d3.axisLeft(y));
+    g.selectAll("line.stem").data(rows).enter().append("line")
+      .attr("class","stem").attr("x1",d=>x(d.day)+x.bandwidth()/2).attr("x2",d=>x(d.day)+x.bandwidth()/2)
+      .attr("y1",h).attr("y2",d=>y(d.o3)).attr("stroke","#f59e0b").attr("stroke-width",2);
+    g.selectAll("circle.dot").data(rows).enter().append("circle")
+      .attr("class","dot").attr("cx",d=>x(d.day)+x.bandwidth()/2).attr("cy",d=>y(d.o3))
+      .attr("r",6).attr("fill","#f59e0b");
+    g.selectAll("text.val").data(rows).enter().append("text")
+      .attr("x",d=>x(d.day)+x.bandwidth()/2).attr("y",d=>y(d.o3)-8)
+      .attr("text-anchor","middle").attr("fill","#e5e7eb").attr("font-size",11).text(d=>d.o3);
+  })();
+
+  // --- 4) AQI – Heatmap (hour × day)
+  (function heatmap(){
+    const grid = d3.rollup(
+      hourly,
+      v => Math.round(d3.mean(v, d => d.aqi)),
+      d => d3.utcFormat("%Y-%m-%d")(d.date),
+      d => d.date.getUTCHours()
+    );
+    const days = Array.from(grid.keys()).sort();
+    const hours = d3.range(24);
+    const margin = {top:30,right:20,bottom:30,left:70};
+    const width = Math.min(980, document.body.clientWidth - 40);
+    const cellSize = Math.max(16, Math.floor((width - margin.left - margin.right) / 26));
+    const height = margin.top + margin.bottom + cellSize * days.length;
+
+    const svg = d3.select("#d3-heatmap").append("svg").attr("width",width).attr("height",height);
+    const inner = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
+    const x = d3.scaleBand().domain(hours).range([0, cellSize*24]);
+    const y = d3.scaleBand().domain(days).range([0, cellSize*days.length]);
+
+    const color = d3.scaleThreshold()
+      .domain([50, 100, 150, 200, 300, 500])
+      .range(["#009966","#FFDE33","#FF9933","#CC0033","#660099","#7E0023","#7E0023"]);
+
+    inner.selectAll("rect.cell").data(days.flatMap(day => hours.map(h => {
+      const val = grid.get(day)?.get(h) ?? null;
+      return {day, hour:h, aqi:val};
+    }))).enter().append("rect")
+      .attr("x",d=>x(d.hour)).attr("y",d=>y(d.day))
+      .attr("width",x.bandwidth()).attr("height",y.bandwidth())
+      .attr("fill",d=>d.aqi==null ? "#111827" : color(d.aqi))
+      .attr("stroke","#0b1220")
+      .append("title").text(d=>`${d.day} ${String(d.hour).padStart(2,"0")}:00  AQI: ${d.aqi ?? "—"}`);
+
+    inner.append("g").attr("transform",`translate(0,${y.range()[1]})`)
+      .call(d3.axisBottom(x).tickValues([0,6,12,18,23]).tickFormat(d=>`${d}h`));
+    inner.append("g").call(d3.axisLeft(y).tickFormat(d=>d.slice(5)));
+  })();
+</script>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!-- templates/registration/signup.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create account – AirWatch</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  </head>
+  <body class="container">
+    <main style="max-width: 520px; margin: 4rem auto;">
+      <h1>Create your account</h1>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <!-- UserCreationForm renders fields: username, password1, password2 -->
+        <label>Username
+          {{ form.username }}
+        </label>
+        <label>Password
+          {{ form.password1 }}
+        </label>
+        <label>Confirm password
+          {{ form.password2 }}
+        </label>
+
+        {% if form.errors %}
+          <article class="contrast" style="margin-top:1rem;">
+            <hgroup>
+              <h4>There were some issues:</h4>
+            </hgroup>
+            <ul>
+              {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                  <li>{{ field }}: {{ error }}</li>
+                {% endfor %}
+              {% endfor %}
+            </ul>
+          </article>
+        {% endif %}
+
+        <button type="submit" style="margin-top:1rem;">Create account</button>
+      </form>
+
+      <p style="margin-top:1rem;">
+        Already have an account? <a href="{% url 'login' %}">Log in</a>
+        &nbsp;•&nbsp; <a href="{% url 'landing' %}">Back to home</a>
+      </p>
+    </main>
+  </body>
+</html>
