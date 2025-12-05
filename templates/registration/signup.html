@@ -4,47 +4,107 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Create account – AirWatch</title>
+    <title>Create Account – AirWatch</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+      body { background: linear-gradient(135deg, #eef2f3, #ffffff); font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif; color: #222; }
+      header { display:flex; justify-content:space-between; align-items:center; padding:1.5rem 2rem; background:#ffffffc7; backdrop-filter:blur(6px); box-shadow:0 2px 10px rgba(0,0,0,.08); border-radius:0 0 12px 12px; }
+      header h1 { margin:0; font-size:1.6rem; font-weight:600; color:#007aff; }
+      .nav-buttons { display:flex; gap:.8rem; }
+      .nav-buttons a[role="button"] { background-color:#007aff; color:#fff !important; border:none; border-radius:8px; padding:.6rem 1.2rem; font-weight:500; transition:.25s; text-decoration:none; }
+      .nav-buttons a[role="button"]:hover { background:#005fcc; transform:translateY(-1px); box-shadow:0 4px 10px rgba(0,122,255,.3); }
+      main { max-width:540px; margin:5rem auto; background:#fff; padding:2.5rem 2rem; border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.08); }
+      main h1 { text-align:center; margin-bottom:1.5rem; font-size:1.8rem; color:#007aff; }
+      label { display:block; margin:.75rem 0 .4rem; font-weight:600; color:#333; }
+      input { border-radius:8px; border:1px solid #ccc; padding:.65rem; width:100%; font-size:1rem; }
+      input:focus { border-color:#007aff; box-shadow:0 0 0 2px rgba(0,122,255,.2); outline:none; }
+      .help { display:block; margin-top:.35rem; color:#666; font-size:.9rem; }
+      .error { display:block; margin-top:.35rem; color:#a60000; font-weight:600; }
+      .errors-box { background:#ffe5e5; border-left:4px solid #ff4d4d; color:#a60000; padding:.8rem 1rem; border-radius:8px; margin:.75rem 0 1rem; }
+      button { width:100%; background:#007aff; color:#fff; border:none; border-radius:8px; padding:.8rem; font-size:1.1rem; font-weight:700; cursor:pointer; transition:.25s; margin-top:.75rem; }
+      button:hover { background:#005fcc; transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,122,255,.3); }
+      p { text-align:center; margin-top:1.2rem; color:#555; }
+      p a { color:#007aff; text-decoration:none; font-weight:500; }
+      p a:hover { text-decoration:underline; }
+      .checkbox-row { display:flex; align-items:center; gap:.5rem; margin-top:.5rem; }
+    </style>
   </head>
-  <body class="container">
-    <main style="max-width: 520px; margin: 4rem auto;">
-      <h1>Create your account</h1>
+
+  <body>
+    <header>
+      <h1>AirWatch</h1>
+      <div class="nav-buttons">
+        <a href="{% url 'landing' %}" role="button">Home</a>
+        <a href="{% url 'login' %}" role="button">Login</a>
+      </div>
+    </header>
+
+    <main>
+      <h1>Create Your Account</h1>
 
       <form method="post" novalidate>
         {% csrf_token %}
-        <!-- UserCreationForm renders fields: username, password1, password2 -->
-        <label>Username
-          {{ form.username }}
-        </label>
-        <label>Password
-          {{ form.password1 }}
-        </label>
-        <label>Confirm password
-          {{ form.password2 }}
-        </label>
 
-        {% if form.errors %}
-          <article class="contrast" style="margin-top:1rem;">
-            <hgroup>
-              <h4>There were some issues:</h4>
-            </hgroup>
+        {# Non-field errors #}
+        {% if form.non_field_errors %}
+          <div class="errors-box" role="alert">
             <ul>
-              {% for field, errors in form.errors.items %}
-                {% for error in errors %}
-                  <li>{{ field }}: {{ error }}</li>
-                {% endfor %}
+              {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
               {% endfor %}
             </ul>
-          </article>
+          </div>
         {% endif %}
 
-        <button type="submit" style="margin-top:1rem;">Create account</button>
+        <label for="{{ form.username.id_for_label }}">Username</label>
+        {{ form.username }}
+        {% if form.username.help_text %}<small class="help">{{ form.username.help_text|safe }}</small>{% endif %}
+        {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
+
+        <label for="{{ form.password1.id_for_label }}">Password</label>
+        {{ form.password1 }}
+        {% if form.password1.help_text %}<small class="help">{{ form.password1.help_text|safe }}</small>{% endif %}
+        {% for error in form.password1.errors %}<small class="error">{{ error }}</small>{% endfor %}
+
+        <label for="{{ form.password2.id_for_label }}">Confirm Password</label>
+        {{ form.password2 }}
+        {% if form.password2.help_text %}<small class="help">{{ form.password2.help_text|safe }}</small>{% endif %}
+        {% for error in form.password2.errors %}<small class="error">{{ error }}</small>{% endfor %}
+
+        <div class="checkbox-row">
+          {{ form.become_admin }}
+          <label for="{{ form.become_admin.id_for_label }}" style="margin:0;">
+            {{ form.become_admin.label }}
+          </label>
+        </div>
+        {% if form.become_admin.help_text %}
+          <small class="help">{{ form.become_admin.help_text }}</small>
+        {% endif %}
+        {% for error in form.become_admin.errors %}<small class="error">{{ error }}</small>{% endfor %}
+
+        {# Fallback list of any remaining field errors (no tuple literal here) #}
+        {% if form.errors %}
+  {% for field in form %}
+    {% if field.errors and field.name != 'username' and field.name != 'password1' and field.name != 'password2' and field.name != 'become_admin' %}
+      <div class="errors-box" role="alert">
+        <strong>{{ field.label }}:</strong>
+        <ul>
+          {% for error in field.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+
+        <button type="submit">Create Account</button>
       </form>
 
-      <p style="margin-top:1rem;">
+      <p>
         Already have an account? <a href="{% url 'login' %}">Log in</a>
-        &nbsp;•&nbsp; <a href="{% url 'landing' %}">Back to home</a>
+        &nbsp;•&nbsp; <a href="{% url 'landing' %}">Back to Home</a>
       </p>
     </main>
   </body>

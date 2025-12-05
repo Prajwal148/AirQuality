@@ -16,10 +16,17 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path,include
+from aqi.views import RoleAwareLoginView
+from django.contrib.auth.views import LogoutView
+
 from aqi import views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("aqi.urls")),             # landing and dashboard
-    path("", include("django.contrib.auth.urls")),  # /login, /logout, /password_change, etc.
+    path("", include("django.contrib.auth.urls")),
+    path("login/", RoleAwareLoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
+
+    # /login, /logout, /password_change, etc.
 ]

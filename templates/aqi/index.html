@@ -7,66 +7,146 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net"/>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
-    :root { --bg:#0f172a; --card:#111827; --fg:#e5e7eb; --muted:#9ca3af; }
-    body { margin:0; font-family: ui-sans-serif,system-ui,Segoe UI,Roboto,Arial; background:linear-gradient(180deg,#0b1220,#0f172a);}
-    .wrap { max-width:1000px; margin:40px auto; padding:0 16px; }
-    .card { background:var(--card); color:var(--fg); border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,.35); padding:20px; }
-    .title { font-size:28px; margin:0 0 8px; }
-    form { display:flex; gap:10px; margin: 12px 0 24px; }
-    input[type="text"]{ flex:1; padding:12px 14px; border-radius:12px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; }
-    button{ padding:12px 18px; border-radius:12px; border:0; background:#2563eb; color:white; font-weight:600; cursor:pointer; }
-    .grid{ display:grid; grid-template-columns: 1fr; gap:16px; }
-    @media (min-width:900px){ .grid{ grid-template-columns: 1.1fr .9fr; } }
-    .pill{ display:inline-block; padding:6px 10px; border-radius:999px; font-weight:600; }
-    .metrics{ display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:12px; }
-    .metric{ background:#0b1220; border:1px solid #334155; padding:12px; border-radius:12px; text-align:center; }
-    .muted{ color:var(--muted); font-size:12px; }
-    footer { color:#94a3b8; text-align:center; margin:24px 0 40px; font-size:12px; }
+    :root{
+      --accent:#007aff;
+      --accent-strong:#005fcc;
+      --text:#222;
+      --muted:#555;
+      --border:#e5e7eb;
+      --card:#ffffff;
+      --bg1:#eef2f3;
+      --bg2:#ffffff;
+    }
+
+    body{
+      margin:0;
+      font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Arial,sans-serif;
+      color:var(--text);
+      background:linear-gradient(135deg,var(--bg1),var(--bg2));
+      min-height:100dvh;
+    }
+
+    .site-header{
+      position:sticky; top:0; z-index:10;
+      display:flex; justify-content:space-between; align-items:center;
+      padding:1rem 1.25rem;
+      background:#ffffffc7;
+      backdrop-filter:saturate(120%) blur(8px);
+      box-shadow:0 2px 10px rgba(0,0,0,.08);
+      border-radius:0 0 12px 12px;
+    }
+    .brand{ font-weight:600; color:var(--accent); }
+
+    .btn{
+      background:var(--accent); color:#fff !important; text-decoration:none;
+      padding:.6rem 1rem; border-radius:8px; font-weight:600;
+      transition:all .2s ease; box-shadow:0 6px 18px rgba(0,122,255,.18);
+    }
+    .btn:hover{ background:var(--accent-strong); transform:translateY(-1px); }
+
+    .wrap{ max-width:1000px; margin:32px auto 40px; padding:0 16px }
+    .card{
+      background:var(--card); border:1px solid var(--border);
+      border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.08);
+      padding:20px;
+    }
+
+    form{ display:flex; gap:10px; margin:12px 0 20px; }
+    input[type="text"]{
+      flex:1; padding:12px 14px; border-radius:12px; border:1px solid var(--border);
+      background:#fff; color:var(--text);
+    }
+    input[type="text"]:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px rgba(0,122,255,.18);
+      outline:none;
+    }
+
+    .grid{ display:grid; grid-template-columns:1fr; gap:16px }
+    @media (min-width:900px){ .grid{ grid-template-columns:1.1fr .9fr } }
+
+    .pill{
+      display:inline-block; padding:6px 12px; border-radius:999px; font-weight:700;
+      background:#f8fafc; margin:6px 0 10px;
+    }
+
+    .metrics{ display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:10px }
+    .metric{ background:#f8fafc; border:1px solid var(--border);
+      padding:12px; border-radius:12px; text-align:center; }
+    .metric .label{ color:#6b7280; font-size:12px; margin-bottom:6px }
+    .metric .val{ font-size:20px }
+
+    #pm25-area,#pm10-bars,#o3-lollipop,#d3-heatmap{ width:100% }
+
+    footer{ color:#667085; text-align:center; margin:24px 0 40px; font-size:12px }
+    .legend{ display:flex; justify-content:center; gap:10px; margin-top:12px; flex-wrap:wrap; font-size:13px; }
+    .legend-item{ display:flex; align-items:center; gap:4px; }
+    .legend-box{ width:16px; height:16px; border-radius:4px; border:1px solid #ccc; }
   </style>
 </head>
 <body>
-<header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-  <strong>AirWatch – Dashboard</strong>
-  <nav>
-    <span style="margin-right:1rem;">Hello, {{ request.user.username }}</span>
-    <a href="{% url 'logout' %}?next=/" role="button" class="secondary">Logout</a>
+
+<header class="site-header">
+  <div class="brand">AirWatch – Dashboard</div>
+  <nav style="display:flex; gap:.75rem; align-items:center;">
+    <span style="color:#666;">Hello, {{ request.user.username }}</span>
+    <form action="{% url 'logout' %}" method="post" style="display:inline;">
+      {% csrf_token %}
+      <button class="btn" type="submit">Logout</button>
+    </form>
   </nav>
 </header>
+
 <div class="wrap">
   <div class="card">
-    <h1 class="title">AirWatch – Air Quality Monitor</h1>
-    <p class="muted">Enter a city name (e.g., “Chicago”) or a ZIP code (e.g., “60601”).</p>
+    <h1 style="margin:0 0 6px;">AirWatch – Air Quality Monitor</h1>
+    <p style="color:var(--muted);margin:0 0 14px;">Enter a city name (e.g., “Chicago”) or ZIP (e.g., “60601”).</p>
+
     <form method="get">
       <input type="text" name="q" placeholder="City or ZIP…" value="{{ request.GET.q|default:'' }}" required>
-      <button type="submit">Check AQI</button>
+      <a class="btn" onclick="this.closest('form').submit()" role="button">Check AQI</a>
     </form>
 
     {% if error %}
-      <p style="color:#fca5a5;">{{ error }}</p>
+      <p style="color:#b42318; font-weight:600;">{{ error }}</p>
     {% endif %}
 
     {% if result %}
       <div class="grid">
         <div>
           <h2 style="margin:6px 0 4px;">{{ result.place }}</h2>
-          <div class="pill" style="background: {{ result.color }};">AQI: {{ result.aqi }} — {{ result.category }}</div>
+          <div class="pill" style="border:1px solid {{ result.color }}; background:{{ result.color }}22;">
+            AQI: {{ result.aqi }} — {{ result.category }}
+          </div>
 
           <div class="metrics">
-            <div class="metric"><div class="muted">PM2.5 (µg/m³)</div><div style="font-size:20px;">{{ result.current.pm2_5|default:"–" }}</div></div>
-            <div class="metric"><div class="muted">PM10 (µg/m³)</div><div style="font-size:20px;">{{ result.current.pm10|default:"–" }}</div></div>
-            <div class="metric"><div class="muted">O₃ (µg/m³)</div><div style="font-size:20px;">{{ result.current.o3|default:"–" }}</div></div>
+            <div class="metric">
+              <div class="label" title="Fine particles ≤2.5 µm; reach deep into lungs and can affect heart and lungs.">PM2.5 (µg/m³)</div>
+              <div class="val">{{ result.current.pm2_5|default:"–" }}</div>
+            </div>
+            <div class="metric">
+              <div class="label" title="Coarser particles ≤10 µm; dust and pollen that can irritate eyes and throat.">PM10 (µg/m³)</div>
+              <div class="val">{{ result.current.pm10|default:"–" }}</div>
+            </div>
+            <div class="metric">
+              <div class="label" title="Ground-level ozone; forms in sunlight and can irritate lungs.">O₃ (µg/m³)</div>
+              <div class="val">{{ result.current.o3|default:"–" }}</div>
+            </div>
           </div>
         </div>
 
         <div>
           <div class="metric">
-            <div class="muted">CO (µg/m³)</div><div style="font-size:20px;">{{ result.current.co|default:"–" }}</div>
+            <div class="label" title="Carbon monoxide; reduces blood’s ability to carry oxygen.">CO (µg/m³)</div>
+            <div class="val">{{ result.current.co|default:"–" }}</div>
           </div>
           <div class="metric" style="margin-top:12px;">
-            <div class="muted">NO₂ (µg/m³)</div><div style="font-size:20px;">{{ result.current.no2|default:"–" }}</div>
+            <div class="label" title="Nitrogen dioxide; from vehicles, can inflame airways.">NO₂ (µg/m³)</div>
+            <div class="val">{{ result.current.no2|default:"–" }}</div>
           </div>
           <div class="metric" style="margin-top:12px;">
-            <div class="muted">SO₂ (µg/m³)</div><div style="font-size:20px;">{{ result.current.so2|default:"–" }}</div>
+            <div class="label" title="Sulfur dioxide; from burning fuels, can trigger breathing problems.">SO₂ (µg/m³)</div>
+            <div class="val">{{ result.current.so2|default:"–" }}</div>
           </div>
         </div>
       </div>
@@ -75,26 +155,26 @@
 
   {% if result %}
   <div class="card" style="margin-top:16px;">
-    <h3 style="margin:0 0 8px;">7-Day Overview (D3)</h3>
+    <h3 style="margin:0 0 8px;">7-Day Overview</h3>
 
-    <div style="margin-top:8px;">
-      <h4 style="margin:0 0 10px;">PM2.5 — Hourly Area</h4>
-      <div id="pm25-area"></div>
-    </div>
+    <h4 style="margin:12px 0 8px;">PM2.5 — Hourly Area--Fine particles ≤2.5 µm; reach deep into lungs and can affect heart and lungs.</h4>
+    <div id="pm25-area"></div>
 
-    <div style="margin-top:16px;">
-      <h4 style="margin:0 0 10px;">PM10 — Daily Columns</h4>
-      <div id="pm10-bars"></div>
-    </div>
+    <h4 style="margin:16px 0 8px;">PM10 — Daily Columns--Coarser particles ≤10 µm; dust and pollen that can irritate eyes and throat.</h4>
+    <div id="pm10-bars"></div>
 
-    <div style="margin-top:16px;">
-      <h4 style="margin:0 0 10px;">O₃ — Daily Lollipop</h4>
-      <div id="o3-lollipop"></div>
-    </div>
+    <h4 style="margin:16px 0 8px;">O₃ — Daily Lollipop--Ground-level ozone; forms in sunlight and can irritate lungs.</h4>
+    <div id="o3-lollipop"></div>
 
-    <div style="margin-top:16px;">
-      <h4 style="margin:0 0 10px;">AQI — Heatmap (Hour × Day)</h4>
-      <div id="d3-heatmap"></div>
+    <h4 style="margin:16px 0 8px;">AQI — Heatmap (Hour × Day)</h4>
+    <div id="d3-heatmap"></div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-box" style="background:#009966"></div>Good (0-50)</div>
+      <div class="legend-item"><div class="legend-box" style="background:#FFDE33"></div>Moderate (51-100)</div>
+      <div class="legend-item"><div class="legend-box" style="background:#FF9933"></div>Unhealthy (101-150)</div>
+      <div class="legend-item"><div class="legend-box" style="background:#CC0033"></div>Very Unhealthy (151-200)</div>
+      <div class="legend-item"><div class="legend-box" style="background:#660099"></div>Hazardous (201-300+)</div>
     </div>
   </div>
   {% endif %}
@@ -104,111 +184,77 @@
 
 {% if result %}
 <script>
-  // Data prepared by the view (requires the updated views.py with result.hourly & result.daily)
-  const hourly = {{ result.hourly|safe }};   // [{time, pm2_5, pm10, o3, aqi}]
-  const daily  = {{ result.daily|safe }};    // [{day, pm2_5, pm10, o3, aqi}]
-
-  // --- parsing helpers
+  const hourly = {{ result.hourly|safe }};
+  const daily  = {{ result.daily|safe }};
   const parseISO = d3.utcParse("%Y-%m-%dT%H:%M");
   hourly.forEach(d => d.date = parseISO(d.time));
   const parseDay = d3.utcParse("%Y-%m-%d");
   daily.forEach(d => d.date = parseDay(d.day));
-
-  const makeSvg = (sel, width=Math.min(980, document.body.clientWidth - 40), height=280, m={top:20,right:22,bottom:32,left:48}) => {
-    const svg = d3.select(sel).append("svg").attr("width", width).attr("height", height);
-    const g = svg.append("g").attr("transform", `translate(${m.left},${m.top})`);
-    return {svg, g, width, height, m, w: width - m.left - m.right, h: height - m.top - m.bottom};
+  const makeSvg = (sel,w=Math.min(980,document.body.clientWidth-40),h=280,m={top:20,right:22,bottom:32,left:48})=>{
+    const svg=d3.select(sel).append("svg").attr("width",w).attr("height",h);
+    const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+    return {g,w:w-m.left-m.right,h:h-m.top-m.bottom};
   };
-
-  // --- 1) PM2.5 – Hourly Area
-  (function pm25Area(){
-    const rows = hourly.filter(d => d.pm2_5 != null);
-    if (!rows.length) return;
-    const {g, w, h} = makeSvg("#pm25-area");
-    const x = d3.scaleUtc().domain(d3.extent(rows, d => d.date)).range([0, w]);
-    const y = d3.scaleLinear().domain([0, d3.max(rows, d => d.pm2_5) || 1]).nice().range([h, 0]);
-    g.append("g").attr("transform", `translate(0,${h})`).call(d3.axisBottom(x).ticks(7).tickFormat(d3.utcFormat("%m-%d %Hh")));
+  // PM2.5 Area
+  (()=>{const r=hourly.filter(d=>d.pm2_5!=null);if(!r.length)return;
+    const {g,w,h}=makeSvg("#pm25-area");
+    const x=d3.scaleUtc().domain(d3.extent(r,d=>d.date)).range([0,w]);
+    const y=d3.scaleLinear().domain([0,d3.max(r,d=>d.pm2_5)||1]).nice().range([h,0]);
+    g.append("g").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(7).tickFormat(d3.utcFormat("%m-%d %Hh")));
     g.append("g").call(d3.axisLeft(y));
-    const area = d3.area().defined(d=>d.pm2_5!=null).x(d=>x(d.date)).y0(h).y1(d=>y(d.pm2_5)).curve(d3.curveMonotoneX);
-    const line = d3.line().defined(d=>d.pm2_5!=null).x(d=>x(d.date)).y(d=>y(d.pm2_5)).curve(d3.curveMonotoneX);
-    g.append("path").datum(rows).attr("fill","#60a5fa").attr("opacity",0.4).attr("d",area);
-    g.append("path").datum(rows).attr("fill","none").attr("stroke","#60a5fa").attr("stroke-width",2).attr("d",line);
+    g.append("path").datum(r).attr("fill","#60a5fa55").attr("d",d3.area().x(d=>x(d.date)).y0(h).y1(d=>y(d.pm2_5)).curve(d3.curveMonotoneX));
+    g.append("path").datum(r).attr("fill","none").attr("stroke","#2563eb").attr("stroke-width",2)
+      .attr("d",d3.line().x(d=>x(d.date)).y(d=>y(d.pm2_5)).curve(d3.curveMonotoneX));
   })();
-
-  // --- 2) PM10 – Daily Columns
-  (function pm10Bars(){
-    const rows = daily.filter(d => d.pm10 != null);
-    if (!rows.length) return;
-    const {g, w, h} = makeSvg("#pm10-bars", undefined, 260);
-    const x = d3.scaleBand().domain(rows.map(d=>d.day)).range([0,w]).padding(0.2);
-    const y = d3.scaleLinear().domain([0, d3.max(rows, d=>d.pm10) || 1]).nice().range([h,0]);
+  // PM10 Bars
+  (()=>{const r=daily.filter(d=>d.pm10!=null);if(!r.length)return;
+    const {g,w,h}=makeSvg("#pm10-bars",undefined,260);
+    const x=d3.scaleBand().domain(r.map(d=>d.day)).range([0,w]).padding(.2);
+    const y=d3.scaleLinear().domain([0,d3.max(r,d=>d.pm10)||1]).nice().range([h,0]);
     g.append("g").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d=>d.slice(5)));
     g.append("g").call(d3.axisLeft(y));
-    g.selectAll("rect.bar").data(rows).enter().append("rect")
-      .attr("class","bar").attr("x",d=>x(d.day)).attr("y",d=>y(d.pm10))
-      .attr("width",x.bandwidth()).attr("height",d=>h - y(d.pm10)).attr("fill","#34d399");
-    g.selectAll("text.val").data(rows).enter().append("text")
-      .attr("x",d=>x(d.day)+x.bandwidth()/2).attr("y",d=>y(d.pm10)-6)
-      .attr("text-anchor","middle").attr("fill","#cbd5e1").attr("font-size",11).text(d=>d.pm10);
+    g.selectAll("rect").data(r).enter().append("rect")
+      .attr("x",d=>x(d.day)).attr("y",d=>y(d.pm10))
+      .attr("width",x.bandwidth()).attr("height",d=>h-y(d.pm10)).attr("fill","#34d399");
   })();
-
-  // --- 3) O₃ – Daily Lollipop
-  (function o3Lollipop(){
-    const rows = daily.filter(d => d.o3 != null);
-    if (!rows.length) return;
-    const {g, w, h} = makeSvg("#o3-lollipop", undefined, 260);
-    const x = d3.scaleBand().domain(rows.map(d=>d.day)).range([0,w]).padding(0.25);
-    const y = d3.scaleLinear().domain([0, d3.max(rows, d=>d.o3) || 1]).nice().range([h,0]);
+  // O3 Lollipop
+  (()=>{const r=daily.filter(d=>d.o3!=null);if(!r.length)return;
+    const {g,w,h}=makeSvg("#o3-lollipop",undefined,260);
+    const x=d3.scaleBand().domain(r.map(d=>d.day)).range([0,w]).padding(.25);
+    const y=d3.scaleLinear().domain([0,d3.max(r,d=>d.o3)||1]).nice().range([h,0]);
     g.append("g").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d=>d.slice(5)));
     g.append("g").call(d3.axisLeft(y));
-    g.selectAll("line.stem").data(rows).enter().append("line")
-      .attr("class","stem").attr("x1",d=>x(d.day)+x.bandwidth()/2).attr("x2",d=>x(d.day)+x.bandwidth()/2)
+    g.selectAll("line").data(r).enter().append("line")
+      .attr("x1",d=>x(d.day)+x.bandwidth()/2).attr("x2",d=>x(d.day)+x.bandwidth()/2)
       .attr("y1",h).attr("y2",d=>y(d.o3)).attr("stroke","#f59e0b").attr("stroke-width",2);
-    g.selectAll("circle.dot").data(rows).enter().append("circle")
-      .attr("class","dot").attr("cx",d=>x(d.day)+x.bandwidth()/2).attr("cy",d=>y(d.o3))
-      .attr("r",6).attr("fill","#f59e0b");
-    g.selectAll("text.val").data(rows).enter().append("text")
-      .attr("x",d=>x(d.day)+x.bandwidth()/2).attr("y",d=>y(d.o3)-8)
-      .attr("text-anchor","middle").attr("fill","#e5e7eb").attr("font-size",11).text(d=>d.o3);
+    g.selectAll("circle").data(r).enter().append("circle")
+      .attr("cx",d=>x(d.day)+x.bandwidth()/2).attr("cy",d=>y(d.o3)).attr("r",6).attr("fill","#f59e0b");
   })();
-
-  // --- 4) AQI – Heatmap (hour × day)
-  (function heatmap(){
-    const grid = d3.rollup(
-      hourly,
-      v => Math.round(d3.mean(v, d => d.aqi)),
-      d => d3.utcFormat("%Y-%m-%d")(d.date),
-      d => d.date.getUTCHours()
-    );
-    const days = Array.from(grid.keys()).sort();
-    const hours = d3.range(24);
-    const margin = {top:30,right:20,bottom:30,left:70};
-    const width = Math.min(980, document.body.clientWidth - 40);
-    const cellSize = Math.max(16, Math.floor((width - margin.left - margin.right) / 26));
-    const height = margin.top + margin.bottom + cellSize * days.length;
-
-    const svg = d3.select("#d3-heatmap").append("svg").attr("width",width).attr("height",height);
-    const inner = svg.append("g").attr("transform",`translate(${margin.left},${margin.top})`);
-    const x = d3.scaleBand().domain(hours).range([0, cellSize*24]);
-    const y = d3.scaleBand().domain(days).range([0, cellSize*days.length]);
-
-    const color = d3.scaleThreshold()
-      .domain([50, 100, 150, 200, 300, 500])
-      .range(["#009966","#FFDE33","#FF9933","#CC0033","#660099","#7E0023","#7E0023"]);
-
-    inner.selectAll("rect.cell").data(days.flatMap(day => hours.map(h => {
-      const val = grid.get(day)?.get(h) ?? null;
-      return {day, hour:h, aqi:val};
+  // AQI Heatmap
+  (()=>{const grid=d3.rollup(hourly,v=>Math.round(d3.mean(v,d=>d.aqi)),
+    d=>d3.utcFormat("%Y-%m-%d")(d.date),d=>d.date.getUTCHours());
+    const days=Array.from(grid.keys()).sort(),hours=d3.range(24);
+    const m={top:30,right:20,bottom:30,left:70};
+    const w=Math.min(980,document.body.clientWidth-40);
+    const cell=Math.max(16,Math.floor((w-m.left-m.right)/26));
+    const h=m.top+m.bottom+cell*days.length;
+    const svg=d3.select("#d3-heatmap").append("svg").attr("width",w).attr("height",h);
+    const g=svg.append("g").attr("transform",`translate(${m.left},${m.top})`);
+    const x=d3.scaleBand().domain(hours).range([0,cell*24]);
+    const y=d3.scaleBand().domain(days).range([0,cell*days.length]);
+    const c=d3.scaleThreshold().domain([50,100,150,200,300,500])
+      .range(["#009966","#FFDE33","#FF9933","#CC0033","#660099","#7E0023"]);
+    g.selectAll("rect").data(days.flatMap(day=>hours.map(hr=>{
+      const val=grid.get(day)?.get(hr)||null; return {day,hour:hr,aqi:val};
     }))).enter().append("rect")
       .attr("x",d=>x(d.hour)).attr("y",d=>y(d.day))
       .attr("width",x.bandwidth()).attr("height",y.bandwidth())
-      .attr("fill",d=>d.aqi==null ? "#111827" : color(d.aqi))
-      .attr("stroke","#0b1220")
-      .append("title").text(d=>`${d.day} ${String(d.hour).padStart(2,"0")}:00  AQI: ${d.aqi ?? "—"}`);
-
-    inner.append("g").attr("transform",`translate(0,${y.range()[1]})`)
+      .attr("fill",d=>d.aqi==null?"#f1f5f9":c(d.aqi))
+      .attr("stroke","#e2e8f0")
+      .append("title").text(d=>`${d.day} ${String(d.hour).padStart(2,"0")}:00 AQI: ${d.aqi??"–"}`);
+    g.append("g").attr("transform",`translate(0,${y.range()[1]})`)
       .call(d3.axisBottom(x).tickValues([0,6,12,18,23]).tickFormat(d=>`${d}h`));
-    inner.append("g").call(d3.axisLeft(y).tickFormat(d=>d.slice(5)));
+    g.append("g").call(d3.axisLeft(y).tickFormat(d=>d.slice(5)));
   })();
 </script>
 {% endif %}

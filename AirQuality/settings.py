@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-0fby(ug655d_^o7gg8uffb#7$79bqdgdjojh$dijc*w+6#+o4v'
-
+APP_ADMIN_PROMO_CODE = "Prajwal"
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -52,8 +52,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'AirQuality.urls'
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "/dashboard/"
-LOGOUT_REDIRECT_URL = "/"
+LOGIN_REDIRECT_URL = "/after-login/"   # so the after_login router runs
+LOGOUT_REDIRECT_URL = "landing"
 
 TEMPLATES = [
     {

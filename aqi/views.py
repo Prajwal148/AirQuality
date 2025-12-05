@@ -1,37 +1,107 @@
+# aqi/views.py
 import datetime as dt
 from typing import Tuple, Dict, Any
 from collections import defaultdict
 
 import requests
-from django.shortcuts import render,redirect
+
+from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
-from .models import Location, Measurement
+from django.contrib.auth.views import LoginView
+from django.urls import reverse
+from django.conf import settings
+from django.contrib import messages
+from django.db import IntegrityError
+from django.contrib.auth.models import User
+
+from .models import Location, Measurement, Profile, UserVisibility
+from .forms import (
+    SignUpForm,
+    AdminSelectUserForm,
+    VisibilityForm,
+    BecomeAdminForm,
+)
+from .decorators import app_admin_required
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 
-# Public landing page (no login required)
+# -----------------------------------------------------------------------------
+# Public pages
+# -----------------------------------------------------------------------------
 def landing(request):
-    """Public landing page with Login/Register buttons."""
+    """Public landing page with Login/Register/Admin shortcuts."""
     return render(request, "aqi/homepage.html")
 
-# aqi/views.py (somewhere near landing/home)
-def signup(request):
-    """Public sign-up page: creates a user and logs them in."""
-    if request.method == "POST":
-        form = UserCreationForm(request.POST)
-        if form.is_valid():
-            user = form.save()      # creates the user
-            login(request, user)    # log them in immediately
-            return redirect("dashboard")
-    else:
-        form = UserCreationForm()
 
-    return render(request, "registration/signup.html", {"form": form})
+def signup(request):
+    """
+    Public sign-up page: creates a user and logs them in.
+    If the user checked 'Request admin privileges', redirect to promo flow.
+    """
+    if request.method == "POST":
+        form = SignUpForm(request.POST)
+        if form.is_valid():
+            # extra safety: block case-insensitive duplicates up front
+            uname = (form.cleaned_data.get("username") or "").strip()
+            if User.objects.filter(username__iexact=uname).exists():
+                form.add_error("username", "This username is already taken.")
+            else:
+                try:
+                    user = form.save(commit=False)
+                    user.username = uname  # ensure trimmed username is saved
+                    user.save()
+                except IntegrityError:
+                    # DB-level unique constraint (race condition or oddity)
+                    form.add_error("username", "This username is already taken.")
+                else:
+                    login(request, user)
+                    if form.cleaned_data.get("become_admin"):
+                        return redirect("become-admin")
+                    return redirect("dashboard")
+    else:
+        form = SignUpForm()
+    return render(request, "registration/signup.html", {
+        "form": form,
+        "excluded_fields": ["username", "password1", "password2", "become_admin"],
+    })
+
+class RoleAwareLoginView(LoginView):
+    """
+    Sends admins to admin panel; others to dashboard.
+    Also prevents non-admins from being redirected via next=/admin-panel/.
+    """
+    def get_success_url(self):
+        user = self.request.user
+        next_url = self.get_redirect_url()  # honors ?next= if allowed
+        is_admin = bool(getattr(getattr(user, "profile", None), "is_app_admin", False))
+        admin_url = reverse("admin-panel")
+        dash_url = reverse("dashboard")
+
+        if is_admin:
+            return admin_url
+
+        # Non-admin: if next explicitly points to admin panel, ignore it.
+        if next_url and next_url.rstrip("/") == admin_url.rstrip("/"):
+            return dash_url
+
+        return next_url or dash_url
+
+
+@login_required
+def after_login(request):
+    """
+    Role-aware redirect after login if you prefer using LOGIN_REDIRECT_URL=/after-login/.
+    If you switch to RoleAwareLoginView (recommended), this can remain as a fallback.
+    """
+    prof = getattr(request.user, "profile", None)
+    if prof and prof.is_app_admin:
+        return redirect("admin-panel")
+    return redirect("dashboard")
+
 
 # -----------------------------------------------------------------------------
 # Geocoding
@@ -44,7 +114,6 @@ def geocode(query: str) -> Tuple[float, float, str]:
         raise ValueError("Place not found. Try a different city.")
     res = data["results"][0]
 
-    # Build a neat display name like "Grand Rapids, Michigan, US"
     parts = [res.get("name")]
     if res.get("admin1"):
         parts.append(res["admin1"])
@@ -77,16 +146,10 @@ BREAKPOINTS = {
 }
 
 def ugm3_to_ppm_o3(ugm3: float, temp_c: float = 25.0, pressure_hpa: float = 1013.25) -> float:
-    """
-    Convert ozone from µg/m³ to ppm using molar volume.
-    ppm = (µg/m³ / 1000) * (Vm / MW)
-    Vm ≈ 24.45 * (T/298.15) * (1013.25/pressure_hpa)  [L/mol]
-    MW (O3) = 48 g/mol
-    At ~25°C & 1 atm this is ~ ugm3 * 0.000509 ppm.
-    """
+    """Convert ozone µg/m³ → ppm using molar volume approximation."""
     MW = 48.0
     T = temp_c + 273.15
-    Vm = 24.45 * (T / 298.15) * (1013.25 / pressure_hpa)
+    Vm = 24.45 * (T / 298.15) * (1013.25 / pressure_hpa)  # L/mol
     return (ugm3 / 1000.0) * (Vm / MW)
 
 def compute_us_aqi(vals: Dict[str, float]) -> int:
@@ -103,7 +166,7 @@ def compute_us_aqi(vals: Dict[str, float]) -> int:
         candidates.append(subindex("pm10", pm10))
     if (o3ug := vals.get("o3")) is not None:
         o3ppm = ugm3_to_ppm_o3(o3ug)
-        o3ppm = max(0.0, min(o3ppm, 0.200))  # clamp to breakpoint table range
+        o3ppm = max(0.0, min(o3ppm, 0.200))  # clamp to table range
         candidates.append(subindex("o3", o3ppm))
     candidates = [c for c in candidates if c is not None]
     return max(candidates) if candidates else 0
@@ -117,7 +180,6 @@ def aqi_category(aqi: int) -> Tuple[str, str]:
     return ("Hazardous", "#7E0023")
 
 def pollutant_subindices(vals: Dict[str, float]) -> Dict[str, int]:
-    """Convenience to see which pollutant drives AQI."""
     out = {}
     if vals.get("pm2_5") is not None:
         out["pm2_5"] = compute_us_aqi({"pm2_5": vals["pm2_5"]})
@@ -132,17 +194,11 @@ def pollutant_subindices(vals: Dict[str, float]) -> Dict[str, int]:
 # Data fetch
 # -----------------------------------------------------------------------------
 def fetch_air_quality(lat: float, lon: float) -> Dict[str, Any]:
-    """
-    Fetch ~7 days of hourly pollutants.
-    Use `past_days` + `forecast_days` + UTC to avoid empty arrays due to TZ/format issues.
-    """
+    """Fetch ~7 days of hourly pollutants (UTC, past_days + forecast_days)."""
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": (
-            "pm2_5,pm10,ozone,carbon_monoxide,"
-            "nitrogen_dioxide,sulphur_dioxide"
-        ),
+        "hourly": "pm2_5,pm10,ozone,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide",
         "timezone": "UTC",
         "past_days": 6,
         "forecast_days": 1,
@@ -153,12 +209,123 @@ def fetch_air_quality(lat: float, lon: float) -> Dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
+# Visibility filtering helpers
+# -----------------------------------------------------------------------------
+def _filter_by_visibility(user, cur_vals, series, hourly_rows, daily_rows, aqi_now, aqi_cat_color):
+    """Apply per-user visibility rules (from UserVisibility)."""
+    vis = getattr(user, "visibility", None)
+    if not vis:
+        return cur_vals, series, hourly_rows, daily_rows, aqi_now, aqi_cat_color
+
+    allowed = set(vis.allowed_keys())
+
+    # AQI tile gate
+    if not vis.can_aqi:
+        aqi_now = 0
+        aqi_cat_color = ("Hidden", "#999999")
+
+    # Filter current tiles
+    filtered_current = {}
+    for k in ["pm2_5", "pm10", "o3", "co", "no2", "so2"]:
+        filtered_current[k] = cur_vals.get(k) if k in allowed else None
+
+    # Filter legacy series
+    filtered_series = {"time": series.get("time", [])}
+    for k in ["pm2_5", "pm10", "o3", "co", "no2", "so2"]:
+        filtered_series[k] = series.get(k, []) if k in allowed else []
+
+    # Filter hourly rows
+    filtered_hourly = []
+    for row in hourly_rows:
+        new = {"time": row["time"], "aqi": row.get("aqi")}
+        if "pm2_5" in allowed: new["pm2_5"] = row.get("pm2_5")
+        if "pm10"  in allowed: new["pm10"]  = row.get("pm10")
+        if "o3"    in allowed: new["o3"]    = row.get("o3")
+        filtered_hourly.append(new)
+
+    # Filter daily rows
+    filtered_daily = []
+    for row in daily_rows:
+        new = {"day": row["day"], "aqi": row.get("aqi")}
+        if "pm2_5" in allowed: new["pm2_5"] = row.get("pm2_5")
+        if "pm10"  in allowed: new["pm10"]  = row.get("pm10")
+        if "o3"    in allowed: new["o3"]    = row.get("o3")
+        filtered_daily.append(new)
+
+    return filtered_current, filtered_series, filtered_hourly, filtered_daily, aqi_now, aqi_cat_color
+
+
+# -----------------------------------------------------------------------------
+# Become Admin (promo code) + Admin Panel
+# -----------------------------------------------------------------------------
+@login_required
+def become_admin(request):
+    """Let a logged-in user become app admin if they know the promo code."""
+    if request.method == "POST":
+        form = BecomeAdminForm(request.POST)
+        if form.is_valid():
+            promo = form.cleaned_data["promo_code"]
+            if promo and promo == getattr(settings, "APP_ADMIN_PROMO_CODE", ""):
+                prof, _ = Profile.objects.get_or_create(user=request.user)
+                prof.is_app_admin = True
+                prof.save()
+                messages.success(request, "You are now an app admin.")
+                return redirect("admin-panel")
+            messages.error(request, "Invalid promo code.")
+    else:
+        form = BecomeAdminForm()
+    return render(request, "aqi/become_admin.html", {"form": form})
+
+
+@login_required
+@app_admin_required  # <— hard 403 if not admin
+def admin_panel(request):
+    """Admin page: choose a user and update which parameters they can see."""
+    selected_user = None
+    vis_form = None
+
+    if request.method == "POST":
+        if "select_user" in request.POST:
+            select_form = AdminSelectUserForm(request.POST)
+            if select_form.is_valid():
+                selected_user = select_form.cleaned_data["user"]
+        elif "save_visibility" in request.POST:
+            select_form = AdminSelectUserForm(request.POST)
+            if select_form.is_valid():
+                selected_user = select_form.cleaned_data["user"]
+            if selected_user:
+                vis = getattr(selected_user, "visibility", None)
+                if not vis:
+                    vis = UserVisibility.objects.create(user=selected_user)
+                vis_form = VisibilityForm(request.POST, instance=vis)
+                if vis_form.is_valid():
+                    vis_form.save()
+                    messages.success(request, f"Updated visibility for {selected_user.username}.")
+    else:
+        select_form = AdminSelectUserForm()
+
+    if selected_user and not vis_form:
+        vis = getattr(selected_user, "visibility", None)
+        if not vis:
+            vis = UserVisibility.objects.create(user=selected_user)
+        vis_form = VisibilityForm(instance=vis)
+
+    context = {
+        "select_form": select_form,
+        "selected_user": selected_user,
+        "vis_form": vis_form,
+    }
+    return render(request, "aqi/admin_panel.html", context)
+
+
+# -----------------------------------------------------------------------------
 # Login-protected dashboard
 # -----------------------------------------------------------------------------
 @login_required
 def home(request):
     context = {"result": None, "error": None}
     q = request.GET.get("q")  # city or ZIP
+
     if q:
         try:
             lat, lon, placename = geocode(q)
@@ -191,7 +358,7 @@ def home(request):
             aqi_now = compute_us_aqi(cur_vals)
             cat, color = aqi_category(aqi_now)
 
-            # persist hourly (optional) — API times are UTC (we requested UTC)
+            # persist hourly — API times are UTC (we requested UTC)
             for t, p25, p10v, oz, cco, cno2, cso2 in zip(
                 times, pm25 or [None]*len(times), pm10 or [None]*len(times),
                 o3 or [None]*len(times), co or [None]*len(times),
@@ -248,25 +415,33 @@ def home(request):
             subs = pollutant_subindices(cur_vals)
             dominant = max(subs.items(), key=lambda kv: kv[1])[0] if subs else None
 
+            # Base series payload
+            base_series = {
+                "time": times,
+                "pm2_5": pm25,
+                "pm10":  pm10,
+                "o3":    o3,
+                "co":    co,
+                "no2":   no2,
+                "so2":   so2,
+            }
+
+            # Apply per-user visibility (note: use filtered_current!)
+            cur_vals, filt_series, filt_hourly, filt_daily, aqi_now, (cat, color) = _filter_by_visibility(
+                request.user, cur_vals, base_series, hourly_rows, daily_rows, aqi_now, (cat, color)
+            )
+
             context["result"] = {
-                "place": loc.name,
+                "place": placename,
                 "aqi": aqi_now,
                 "category": cat,
                 "color": color,
                 "dominant": dominant,
                 "subindices": subs,
-                "current": cur_vals,
-                "series": {
-                    "time": times,
-                    "pm2_5": pm25,
-                    "pm10":  pm10,
-                    "o3":    o3,
-                    "co":    co,
-                    "no2":   no2,
-                    "so2":   so2,
-                },
-                "hourly": hourly_rows,
-                "daily":  daily_rows,
+                "current": cur_vals,        # ← filtered current values
+                "series": filt_series,
+                "hourly": filt_hourly,
+                "daily":  filt_daily,
             }
 
         except Exception as e:
